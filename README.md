@@ -18,9 +18,9 @@ Threshold was shelved at the principal's direction on 2026-11-07, in a **GREEN**
 
 **To resume:** send a new bootstrap prompt to a fresh agent. The cross-project `build-learnings` retrospective (especially §Shelving) is the operating manual — it records what was shelved, why, and what the resume procedure is. Do not assume a fresh agent has any of this session's state.
 
-## v1.0.0 — what works
+## What works (as of v1.0.2 — final release)
 
-This is the first release. Per the build contract's "ship the loop on day one" rule, v1.0.0 ships the **full heartbeat → escalation → release loop** at minimum fidelity:
+This is the first release. Per the build contract's "ship the loop on day one" rule, v1.0.0 ships the **full heartbeat → escalation → release loop** at minimum fidelity. v1.0.1 moved the build+sign+attach pipeline fully into CI, and v1.0.2 re-enabled v1 signing alongside v2+v3 after the "no certificates" false-negative incident — see [CHANGELOG.md](CHANGELOG.md) for the full release history:
 
 - **Vault**: local-first, encrypted at rest, BIP-39 mnemonic backup (mandatory before first packet).
 - **Identity**: secp256k1 (BIP-340 Schnorr) nsec/npub. Stored in the vault.
@@ -33,9 +33,9 @@ This is the first release. Per the build contract's "ship the loop on day one" r
 - **Audit log**: signed `kind:30083` events (append-only).
 - **Survivor client**: catch-up phase + max-seen rule (per iter-1 P0-4 + P0-15).
 
-## v1.0.0 — known limitations
+## Known limitations (as of v1.0.2 — all carried to the final release)
 
-Per Council iter-1 (see `threshold-docs/council-iter-1/REPORT.md`):
+Per Council iter-1 (see `threshold-docs/council-iter-1/REPORT.md`). **These limitations are present in the final release** — the deferred v1.1+ mitigations were never shipped:
 
 - **M-of-N quorum is deferred to v1.1+.** v1.0.0 ships 1-of-1 packets only (per iter-1 P0-17, to remove a quorum race from v1.0.0).
 - **Per-packet one-time recipient npubs are deferred to v1.1+.** v1.0.0 uses stable contact npubs. **v1.0.0 is NOT safe against state-actor adversaries who can subpoena relays** — see `THREAT-MODEL.md` §1.1.
@@ -46,7 +46,85 @@ Per Council iter-1 (see `threshold-docs/council-iter-1/REPORT.md`):
 
 ## Council
 
-Per the build contract §6, all releases require multi-persona Council review. Council iter-1 (architecture + threat model audit, pre-code) is complete; iter-2 (post-ship audit), iter-3 (security deep-dive), and iter-4 (UX/survivor) follow per `threshold-docs/ops/cron-registry.md`.
+Per the build contract §6, all releases require multi-persona Council review. **All four planned iterations are complete** (records in the private docs repo):
+
+- **iter-1** (architecture + threat-model audit, pre-code) — 22 findings (19 FIX / 2 DEFER / 3 ACCEPT), all P0s resolved before any production Kotlin.
+- **iter-2** (post-ship audit) — accepted the minimal-fidelity UI with v1.1+ commitments; recorded the User Advocate's formal dissent on "shipped, not verified."
+- **iter-3** (security deep-dive, Red Team lead) — attack-tree walk-through against the shipped build; no new P0s; v1.0.x accepted for the personal/family threat-model scope.
+- **iter-4** (UX/survivor, User Advocate lead) — survivor flow walked step-by-step against the code; gaps filed as v1.1+ P0s.
+
+The consolidated cross-project review lives at [`build-learnings/projects/threshold/COUNCIL-REVIEW.md`](https://github.com/AutomatedLabor/build-learnings/blob/main/projects/threshold/COUNCIL-REVIEW.md); per-iteration charters and reports at `threshold-docs/council-iter-{1..4}/`.
+
+## Releases
+
+All releases are attached to [GitHub Releases](https://github.com/AutomatedLabor/threshold/releases) with a `.sha256` sidecar and (from v1.0.1) SLSA build provenance:
+
+| Release | Published (UTC) | versionCode | APK size | APK SHA-256 | Notes |
+|---|---|---|---|---|---|
+| [v1.0.2](https://github.com/AutomatedLabor/threshold/releases/tag/v1.0.2) **(final)** | 2026-11-07T08:23:18Z | 3 | 7,327,084 B | `09296940...6761f4691` | v1+v2+v3 signing; fixes the legacy-checker false negative |
+| [v1.0.1](https://github.com/AutomatedLabor/threshold/releases/tag/v1.0.1) | 2026-11-07T06:36:23Z | 2 | 7,292,137 B | `3dd88460...19fdffd6` | first fully CI-built + signed release (SLSA provenance) |
+| [v1.0.0](https://github.com/AutomatedLabor/threshold/releases/tag/v1.0.0) | 2026-11-07T05:41:45Z | 1 | see sidecar | see sidecar | first release; full loop at minimum fidelity |
+
+### Install
+
+1. Download `threshold-v1.0.2.apk` **and** `threshold-v1.0.2.apk.sha256` from the release page.
+2. Verify integrity and signing (below).
+3. Install on an Android 8.0+ device (minSdk 26), enabling install-from-unknown-sources for your browser/file manager if prompted.
+4. On first launch, complete onboarding: write down the BIP-39 backup mnemonic when shown — the app refuses to seal the first release packet until backup is confirmed.
+
+### Verify a downloaded release
+
+```bash
+# 1) Integrity — must print OK
+sha256sum -c threshold-v1.0.2.apk.sha256
+
+# 2) Signing — expect: Verifies, v1=true, v2=true, v3=true,
+#    DN = CN=Threshold Release, O=AutomatedLabor, C=US
+$ANDROID_HOME/build-tools/35.0.0/apksigner verify --print-certs --verbose \
+    threshold-v1.0.2.apk
+```
+
+⚠️ **Do not use `keytool -printcert -jarfile` to judge whether the APK is signed.** It inspects v1 JAR signing only and reports "Not a signed jar file" for correctly-signed APKs whose v1 files are absent — the exact false negative that made v1.0.1 look "unsigned" and cost a release cycle. Use `apksigner` (as above); see [SECURITY.md](SECURITY.md) and the [post-mortem](https://github.com/AutomatedLabor/build-learnings/blob/main/projects/threshold/POST-MORTEM-shipped-not-installable.md).
+
+## Repository layout
+
+```
+app/src/main/kotlin/com/threshold/app/
+├── crypto/      Crypto.kt (crypto_box_seal + memzero), BIP39.kt (+ wordlist),
+│                Schnorr.kt + NostrIdentity.kt + Bech32.kt (nsec/npub),
+│                BIP39Words.kt
+├── nostr/       Event.kt, EventKinds.kt (NIP-3078 kinds), EventSigner.kt,
+│                RelayPool.kt (multi-relay pub/sub), Publisher.kt,
+│                SurvivorClient.kt (catch-up + max-seen rule)
+├── data/        Vault.kt, Packet.kt, Contact.kt, HeartbeatPolicy.kt,
+│                Defaults.kt (single source of truth for wiring tests)
+├── work/        HeartbeatWorker.kt, EscalationWorker.kt (WorkManager backstop)
+├── MainActivity.kt, ThresholdApp.kt
+app/src/test/kotlin/com/threshold/app/
+├── crypto/      CryptoGoldenVectorsTest.kt (known plaintext→ciphertext),
+│                CryptoFuzzTest.kt (10,000-pair round-trip)
+├── nostr/       MaxSeenRuleTest.kt
+├── audit/       AuditLogRenderTest.kt (renders 100 signed events, verified sigs)
+├── wiring/      5 wiring-boundary tests — every cross-module parameter
+│                asserted against Defaults (the family-locator keystone-bug class)
+crypto-test-vectors.json   golden vectors consumed by CI as contract tests
+.github/workflows/         build.yml, codeql.yml, osv-scanner.yml, gitleaks.yml
+```
+
+## Protocol (NIP-3078)
+
+Threshold defines its wire protocol as a nostr NIP (private docs repo, `NIP.md`). Event kinds:
+
+| Kind | Name | Semantics |
+|---|---|---|
+| `30078` | Heartbeat | replaceable, parameterized check-in (`d=threshold:heartbeat:<user-npub>`); encrypted cadence payload |
+| `30079` | Duress | silent signal fired by the duress unlock; contact client starts a 24 h countdown, does NOT release immediately |
+| `30080` | Escalation step | `step=1\|2\|3` — T+1h reminder, T+24h soft ping, T+72h release pointer |
+| `30081` | Release packet | sealed to the contact's npub (`crypto_box_seal`); decryptable only by them |
+| `30082` | False-alarm cancellation | replaces an escalation; contact client discards partial material |
+| `30083` | Audit-log entry | append-only, signed; readable by any NIP-3078-aware client |
+
+All payloads are encrypted; relays see only ciphertext, the publisher's npub, the recipient's npub (where applicable), the event kind, and `created_at`.
 
 ## Documentation
 
