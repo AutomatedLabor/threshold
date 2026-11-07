@@ -141,7 +141,8 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
-      id-token: write   # for SLSA provenance signing
+      id-token: write        # for SLSA provenance signing (OIDC)
+      attestations: write    # required by actions/attest-build-provenance
     steps:
       - name: Download signed release APK artifact
         uses: actions/download-artifact@v4
