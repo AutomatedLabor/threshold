@@ -8,6 +8,16 @@ You store encrypted "release packets" in a vault on your phone — a password, a
 
 If the user dies, their secrets still flow to the people they chose, on the schedule they set, with the audit log they designed.
 
+## ⚠️ Status: Shelved (2026-11-07)
+
+Threshold was shelved at the principal's direction on 2026-11-07, in a **GREEN** state. The final release is **v1.0.2** — signed v1+v2+v3, cert `CN=Threshold Release, O=AutomatedLabor, C=US`, SHA-256 `092969405e448753e98a78c9ef77a9401e034969bdddc85a89f18ad6761f4691`. All three repos (`threshold`, `threshold-docs`, `build-learnings`) are **preserved, NOT archived**. The verification cron (Job A, ID 511151) continues to verify v1.0.2's integrity + signing every 20 min as a passive watchdog; Jobs B/C/D acknowledge-and-exit on their next tick per the stale-tick guard. **No new releases will be cut under this mandate.**
+
+- Shelving decision + actions: [`threshold-docs/SHELVE-SESSION.md`](https://github.com/AutomatedLabor/threshold-docs/blob/main/SHELVE-SESSION.md)
+- Final tally entry: [`threshold-docs/ops/release-status.md`](https://github.com/AutomatedLabor/threshold-docs/blob/main/ops/release-status.md)
+- Cross-project retrospective (incl. §Shelving): [`build-learnings/projects/threshold/RETROSPECTIVE.md`](https://github.com/AutomatedLabor/build-learnings/blob/main/projects/threshold/RETROSPECTIVE.md)
+
+**To resume:** send a new bootstrap prompt to a fresh agent. The cross-project `build-learnings` retrospective (especially §Shelving) is the operating manual — it records what was shelved, why, and what the resume procedure is. Do not assume a fresh agent has any of this session's state.
+
 ## v1.0.0 — what works
 
 This is the first release. Per the build contract's "ship the loop on day one" rule, v1.0.0 ships the **full heartbeat → escalation → release loop** at minimum fidelity:
