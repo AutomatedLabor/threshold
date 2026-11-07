@@ -62,8 +62,10 @@ jobs:
           THRESHOLD_KEYSTORE_BASE64: ${{ secrets.THRESHOLD_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$THRESHOLD_KEYSTORE_BASE64" ]; then
-            echo "::warning::THRESHOLD_KEYSTORE_BASE64 secret not set; release APK will be unsigned."
-            exit 0
+            echo "::error::THRESHOLD_KEYSTORE_BASE64 secret not set — REFUSING to build."
+            echo "::error::A release built without the keystore would be unsigned (v1.0.1 incident, 2026-11-07)."
+            echo "::error::Set all 4 secrets: THRESHOLD_KEYSTORE_BASE64, THRESHOLD_KEYSTORE_PASSWORD, THRESHOLD_KEY_ALIAS, THRESHOLD_KEY_PASSWORD."
+            exit 1
           fi
           echo "$THRESHOLD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/threshold-release.keystore"
           echo "THRESHOLD_KEYSTORE_FILE=$RUNNER_TEMP/threshold-release.keystore" >> "$GITHUB_ENV"
@@ -74,17 +76,21 @@ jobs:
       - name: Build release APK (signed, R8 enabled per iter-1 P0-6)
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      # Per build-contract §10: apksigner verify reports "Verifies", v2=true, v3=true.
-      - name: Verify release APK signature (v2 + v3 required)
+      # Per build-contract §10: apksigner verify must report "Verifies",
+      # v2=true, v3=true; the v1 JAR signature files must be present (legacy
+      # checkers look there — v1.0.1 "no certificates" incident, 2026-11-07);
+      # and the signer cert must match the pinned release fingerprint.
+      - name: Verify release APK signature (v1 files + v2 + v3 + pinned cert)
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
           if [ ! -f "$APK" ]; then
-            APK=app/build/outputs/apk/release/app-release-unsigned.apk
+            echo "::error::app-release.apk not found (app-release-unsigned.apk fallback removed: unsigned output must fail the build)"
+            exit 1
           fi
-          [ -f "$APK" ] || { echo "::error::release APK not found"; exit 1; }
           BT=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
           $ANDROID_HOME/build-tools/$BT/apksigner verify --print-certs --verbose "$APK" > /tmp/sig.txt 2>&1
           cat /tmp/sig.txt
+          grep -q '^Verifies$' /tmp/sig.txt || { echo "::error::apksigner did not report 'Verifies' — refusing to ship"; exit 1; }
           # Reject the public Android Debug key.
           if grep -q "CN=Android Debug" /tmp/sig.txt; then
             echo "::error::APK signed with public Android Debug key — aborting release."
@@ -93,7 +99,24 @@ jobs:
           # Require v2 + v3 (per build-contract §2).
           grep -q 'Verified using v2 scheme.*: true' /tmp/sig.txt || { echo "::error::v2 signature missing"; exit 1; }
           grep -q 'Verified using v3 scheme.*: true' /tmp/sig.txt || { echo "::error::v3 signature missing"; exit 1; }
-          echo "::notice::Release APK signed with v2+v3"
+          # v1 JAR signature files must be present even though Android >= 24
+          # ignores them at install time: legacy tools (jarsigner, keytool
+          # -printcert -jarfile, zip viewers, web checkers) look there, and
+          # their absence reads as "no certificates" (v1.0.1 incident).
+          if ! unzip -l "$APK" | grep -qE 'META-INF/.*\.(RSA|DSA|EC)$'; then
+            echo "::error::v1 JAR signature missing (no META-INF/*.RSA|DSA|EC) — legacy checkers would report 'no certificates'."
+            exit 1
+          fi
+          # Pin the release identity: signer cert SHA-256 must equal the
+          # fingerprint of the release keystore generated 2026-11-07
+          # (keystore backup: private repo AutomatedLabor/threshold-docs).
+          CERT_SHA=$(grep 'certificate SHA-256 digest' /tmp/sig.txt | head -1 | awk '{print $NF}')
+          EXPECTED=188da80dd8abac9d3f6969c0ac58b03e03115a58ce4234f50c4002e15cdce297
+          if [ "$CERT_SHA" != "$EXPECTED" ]; then
+            echo "::error::signer cert SHA-256 $CERT_SHA != pinned $EXPECTED — wrong keystore?"
+            exit 1
+          fi
+          echo "::notice::Release APK signed v1+v2+v3 with pinned release identity"
 
       - name: Run unit tests (golden vectors + fuzz + wiring-boundary + max-seen + audit)
         run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace

@@ -17,9 +17,11 @@ android {
         // keys widely available from API 26+). Target SDK 34.
         minSdk = 26
         targetSdk = 34
-        // v1.0.0 initial release (post Council iter-1, all P0s resolved).
-        versionCode = 2
-        versionName = "1.0.1"
+        // v1.0.2: sign v1+v2+v3 (v1.0.1 shipped v2/v3-only; legacy checkers
+        // misread that as "no certificates" — see build-learnings
+        // projects/threshold/RETROSPECTIVE.md for the full incident).
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -52,10 +54,17 @@ android {
             keyPassword = System.getenv("THRESHOLD_KEY_PASSWORD")
                 ?: ksProps.getProperty("keyPassword") ?: ""
             // Per build-contract §10 right-first checklist:
-            //   - v1 disabled (minSdk 26 → all supported devices understand v2)
-            //   - v2 enabled (Android 7+)
+            //   - v1 ENABLED (v1.0.1 lesson, 2026-11-07: with v1 disabled,
+            //     META-INF/ contains no cert files, so legacy checkers —
+            //     jarsigner, keytool -printcert -jarfile, zip viewers, web
+            //     "APK signature checkers" — report "no certificates", a
+            //     false negative that blocked installation and cost a
+            //     release cycle. Android >= 24 ignores v1 at install time,
+            //     so enabling it costs nothing functionally while making
+            //     the signature visible to every tool and every checker.)
+            //   - v2 enabled (Android 7+; required by API 24+ installers)
             //   - v3 enabled (Android 9+, key rotation / lineage support)
-            enableV1Signing = false
+            enableV1Signing = true
             enableV2Signing = true
             enableV3Signing = true
         }
