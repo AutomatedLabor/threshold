@@ -18,8 +18,8 @@ android {
         minSdk = 26
         targetSdk = 34
         // v1.0.0 initial release (post Council iter-1, all P0s resolved).
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
