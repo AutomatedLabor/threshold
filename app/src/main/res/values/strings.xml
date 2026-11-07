@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Threshold</string>
+
+    <!-- Onboarding -->
+    <string name="onboarding_welcome">Welcome to Threshold</string>
+    <string name="onboarding_intro">Threshold is a local-first, end-to-end-encrypted dead-man\'s switch. You store encrypted "release packets" on your phone. If you miss check-ins, they\'re delivered to your trusted contacts on a schedule you set.</string>
+    <string name="onboarding_disclaimer_title">Important: Threshold is not a lawyer</string>
+    <string name="onboarding_disclaimer">Threshold is not a lawyer, a will, or a substitute for estate planning advice. Consult a qualified attorney for legal matters.</string>
+    <string name="onboarding_strongbox_warning">Your device does not have hardware-backed StrongBox. Secrets will be stored in the TEE, which is less tamper-resistant. Consider using a device with StrongBox for high-value packets.</string>
+    <string name="onboarding_single_watchdog_warning">Threshold v1.0.0 uses a single watchdog. Configure a reliable watchdog (Cloudflare Worker, not a home server) for maximum reliability.</string>
+
+    <!-- Home -->
+    <string name="home_im_alive">I\'m alive</string>
+    <string name="home_last_check_in">Last check-in: %1$s</string>
+    <string name="home_next_heartbeat">Next heartbeat: %1$s</string>
+    <string name="home_seal_packet">Seal a release packet</string>
+    <string name="home_audit_log">Audit log</string>
+    <string name="home_settings">Settings</string>
+    <string name="home_survivor_view">Survivor view</string>
+
+    <!-- Seal packet -->
+    <string name="seal_title">Seal a release packet</string>
+    <string name="seal_pick_contact">Pick a verified contact</string>
+    <string name="seal_content">Paste or attach the content your contact will receive</string>
+    <string name="seal_preview">This is what your contact will see</string>
+    <string name="seal_policy">Escalation policy</string>
+    <string name="seal_confirm">You are about to seal this to %1$s. It will be released to them if you miss your heartbeat for %2$d hours. This cannot be undone without revoking the packet. Are you sure?</string>
+    <string name="seal_button">Seal packet</string>
+    <string name="seal_cancel">Not yet</string>
+    <string name="seal_success">Packet sealed</string>
+
+    <!-- Survivor -->
+    <string name="survivor_intro">[User] has missed their heartbeat. They designated you to receive a release packet. There is no immediate action required. When you are ready, tap to proceed.</string>
+    <string name="survivor_grief">If you are reading this because someone you love has died, we are sorry.</string>
+    <string name="survivor_resource">Talk to a person (grief support): https://www.befrienders.org</string>
+
+    <!-- Audit -->
+    <string name="audit_title">Audit log</string>
+    <string name="audit_empty">No events yet. Check in to publish your first heartbeat.</string>
+
+    <!-- Settings -->
+    <string name="settings_relays">Relays</string>
+    <string name="settings_contacts">Contacts</string>
+    <string name="settings_backup">Backup</string>
+    <string name="settings_duress">Duress code</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Threshold v%1$s</string>
+
+</resources>

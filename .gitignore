@@ -1,0 +1,16 @@
+# Build artifacts
+/app/build/
+/.gradle/
+/build/
+/local.properties
+/keystore/*.keystore
+/keystore/keystore.properties
+*.apk
+*.ap_
+*.dex
+*.iml
+.idea/
+.DS_Store
+
+# Test outputs
+*.txt.bak

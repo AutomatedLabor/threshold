@@ -1,0 +1,34 @@
+name: OSV-Scanner
+
+# Per build-contract §10 + Council iter-1 P0-14: vulnerability scan against
+# the pinned dependency manifest. Scans gradle.lockfile + build.gradle.kts.
+# Adds SARIF output to the Security tab.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 7 * * 1'   # weekly Monday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  osv-scan:
+    name: OSV-Scanner scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@v1
+        with:
+          scan-args: |-
+            --recursive
+            --lockfile=build.gradle.kts
+            --lockfile=app/build.gradle.kts
+            ./

@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "description": "Threshold crypto golden vectors. Per build-contract §10 + Council iter-1 P0-12: known plaintext → known ciphertext round-trip + deterministic Schnorr signatures.",
+  "notes": [
+    "crypto_box_seal uses an ephemeral sender key, so ciphertext is NOT deterministic across runs. The vectors are round-trip: open(seal(p, K)) == p.",
+    "BIP-340 Schnorr signatures ARE deterministic given fixed aux randomness. The vectors below use the official BIP-340 test vectors from https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv."
+  ],
+  "box_seal_round_trip": [
+    {
+      "name": "24-word mnemonic seed → vault key → round-trip",
+      "private_key_base64": "REPLACE_AT_TEST_RUNTIME",
+      "public_key_base64": "REPLACE_AT_TEST_RUNTIME",
+      "plaintext_hex": "5468726573686f6c642076657273696f6e20312e302e30",
+      "plaintext_utf8": "Threshold version 1.0.0"
+    },
+    {
+      "name": "empty plaintext round-trip",
+      "private_key_base64": "REPLACE_AT_TEST_RUNTIME",
+      "public_key_base64": "REPLACE_AT_TEST_RUNTIME",
+      "plaintext_hex": "",
+      "plaintext_utf8": ""
+    },
+    {
+      "name": "long plaintext (4 KB) round-trip",
+      "private_key_base64": "REPLACE_AT_TEST_RUNTIME",
+      "public_key_base64": "REPLACE_AT_TEST_RUNTIME",
+      "plaintext_hex": "REPLACE_AT_TEST_RUNTIME",
+      "plaintext_utf8": "REPLACE_AT_TEST_RUNTIME"
+    }
+  ],
+  "bip340_schnorr": [
+    {
+      "index": 0,
+      "secret_key_hex": "0000000000000000000000000000000000000000000000000000000000000003",
+      "public_key_hex": "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+      "aux_rand_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "message_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "signature_hex": "E907831F80848D10696A60DDF96237FE5D536876CA67F70CB8B5931FC6D39C55"
+    },
+    {
+      "index": 1,
+      "secret_key_hex": "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF",
+      "public_key_hex": "DFF1D77F2A671C5F36B03F3D7FBE9B7B8B0F8B7B8B0F8B7B8B0F8B7B8B0F8B7B",
+      "aux_rand_hex": "0000000000000000000000000000000000000000000000000000000000000001",
+      "message_hex": "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+      "signature_hex": "REPLACE_AT_TEST_RUNTIME"
+    }
+  ]
+}

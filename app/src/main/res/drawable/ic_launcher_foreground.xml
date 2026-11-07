@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- A simple "door threshold" glyph: two horizontal bars -->
+    <path android:fillColor="#f5f5f5"
+        android:pathData="M30,40 L78,40 L78,46 L30,46 z" />
+    <path android:fillColor="#f5f5f5"
+        android:pathData="M30,62 L78,62 L78,68 L30,68 z" />
+    <path android:fillColor="#f5f5f5"
+        android:pathData="M52,46 L56,46 L56,62 L52,62 z" />
+</vector>

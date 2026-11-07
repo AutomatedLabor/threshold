@@ -1,0 +1,27 @@
+# Threshold gitleaks config (per build-contract §3 PAT custody rules)
+title = "Threshold gitleaks config"
+
+[extend]
+useDefault = true
+
+# Block any GitHub PAT from being committed.
+[[rules]]
+id = "github-pat-blocklist"
+description = "Block any GitHub Personal Access Token from being committed"
+regex = '''ghp_[A-Za-z0-9]{36}'''
+tags = ["key", "github", "pat"]
+
+# Block any common secret prefixes that might leak.
+[[rules]]
+id = "threshold-secret-key-blocklist"
+description = "Block 32-byte hex secrets (could be Threshold nsec / vault key)"
+regex = '''(?i)threshold[_-]?(secret|key|nsec|vault)[_a-z]*\s*[:=]\s*["']?[0-9a-fA-F]{64}["']?'''
+tags = ["key", "threshold"]
+
+[allowlist]
+# Allow the gitleaks config itself to mention the regex pattern as a string.
+paths = [
+  '''\.gitleaks\.toml$''',
+  '''threshold-docs/ops/KILL-SWITCH\.md$''',
+  '''threshold-docs/ops/cron-registry\.md$''',
+]

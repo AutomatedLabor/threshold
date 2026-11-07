@@ -1,0 +1,175 @@
+name: Build and Test
+
+# Adapted from family-locator/.github/workflows/build.yml (proven stack).
+# Per build-contract §10 + Council iter-1 P0-14: required status checks on main.
+#   - Build debug APK
+#   - Build release APK (signed with the release keystore from secrets)
+#   - Verify APK signature (v2 + v3 required; reject debug key)
+#   - Run unit tests (including golden-vector, fuzz, wiring-boundary, max-seen)
+#   - APK size budget gate
+#   - On tag: attach signed APK + .sha256 sidecar + SLSA provenance to GitHub Release
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  android:
+    name: Android build + unit tests + R8 + size budget + release signing
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+      APK_SIZE_BUDGET: 30000000   # 30 MB debug budget (release target is smaller with R8)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Gradle wrapper (supply chain)
+        uses: gradle/actions/wrapper-validation@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Gradle caching
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      # Decode the release keystore from the THRESHOLD_KEYSTORE_BASE64 repo secret.
+      - name: Decode release keystore
+        env:
+          THRESHOLD_KEYSTORE_BASE64: ${{ secrets.THRESHOLD_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$THRESHOLD_KEYSTORE_BASE64" ]; then
+            echo "::warning::THRESHOLD_KEYSTORE_BASE64 secret not set; release APK will be unsigned."
+            exit 0
+          fi
+          echo "$THRESHOLD_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/threshold-release.keystore"
+          echo "THRESHOLD_KEYSTORE_FILE=$RUNNER_TEMP/threshold-release.keystore" >> "$GITHUB_ENV"
+          echo "THRESHOLD_KEYSTORE_PASSWORD=${{ secrets.THRESHOLD_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
+          echo "THRESHOLD_KEY_ALIAS=${{ secrets.THRESHOLD_KEY_ALIAS }}" >> "$GITHUB_ENV"
+          echo "THRESHOLD_KEY_PASSWORD=${{ secrets.THRESHOLD_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+
+      - name: Build release APK (signed, R8 enabled per iter-1 P0-6)
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      # Per build-contract §10: apksigner verify reports "Verifies", v2=true, v3=true.
+      - name: Verify release APK signature (v2 + v3 required)
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            APK=app/build/outputs/apk/release/app-release-unsigned.apk
+          fi
+          [ -f "$APK" ] || { echo "::error::release APK not found"; exit 1; }
+          BT=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
+          $ANDROID_HOME/build-tools/$BT/apksigner verify --print-certs --verbose "$APK" > /tmp/sig.txt 2>&1
+          cat /tmp/sig.txt
+          # Reject the public Android Debug key.
+          if grep -q "CN=Android Debug" /tmp/sig.txt; then
+            echo "::error::APK signed with public Android Debug key — aborting release."
+            exit 1
+          fi
+          # Require v2 + v3 (per build-contract §2).
+          grep -q 'Verified using v2 scheme.*: true' /tmp/sig.txt || { echo "::error::v2 signature missing"; exit 1; }
+          grep -q 'Verified using v3 scheme.*: true' /tmp/sig.txt || { echo "::error::v3 signature missing"; exit 1; }
+          echo "::notice::Release APK signed with v2+v3"
+
+      - name: Run unit tests (golden vectors + fuzz + wiring-boundary + max-seen + audit)
+        run: ./gradlew :app:testDebugUnitTest --no-daemon --stacktrace
+
+      - name: Publish unit test report
+        uses: mikepenz/action-junit-report@v4
+        if: always()
+        with:
+          report_paths: app/build/test-results/testDebugUnitTest/TEST-*.xml
+          require_tests: true
+
+      - name: APK size budget gate
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          [ -f "$APK" ] || { echo "::error::APK not found"; exit 1; }
+          SIZE=$(stat -c%s "$APK")
+          echo "APK size: $SIZE bytes (budget $APK_SIZE_BUDGET)"
+          if [ "$SIZE" -gt "$APK_SIZE_BUDGET" ]; then
+            echo "::error::APK $SIZE exceeds size budget $APK_SIZE_BUDGET (debug)."
+            exit 1
+          fi
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: threshold-release
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload debug APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: threshold-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  release:
+    name: Attach signed release APK + sha256 + SLSA provenance to GitHub Release
+    needs: [ android ]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write   # for SLSA provenance signing
+    steps:
+      - name: Download signed release APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: threshold-release
+          path: dist/
+
+      - name: Stage release assets with tag-derived name
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          SRC=$(find dist -name 'app-release*.apk' -type f | head -1)
+          [ -n "$SRC" ] || { echo "::error::no release APK in artifact"; exit 1; }
+          DST="dist/threshold-${TAG}.apk"
+          mv "$SRC" "$DST"
+          sha256sum "$DST" > "${DST}.sha256"
+          cat "${DST}.sha256"
+
+      - name: Generate SLSA build provenance attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/threshold-${{ github.ref_name }}.apk
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/threshold-*.apk
+            dist/threshold-*.apk.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
