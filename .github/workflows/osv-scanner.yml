@@ -1,8 +1,12 @@
 name: OSV-Scanner
 
 # Per build-contract §10 + Council iter-1 P0-14: vulnerability scan against
-# the pinned dependency manifest. Scans gradle.lockfile + build.gradle.kts.
-# Adds SARIF output to the Security tab.
+# the dependency manifest. Scans the repository recursively; the Gradle
+# build files are picked up via Gradle plugin/heuristics.
+#
+# Job A escalation contract (§7.1): a CVSS >= 7.0 affecting a shipped
+# dependency is a P0. This workflow surfaces those findings in the Security
+# tab as SARIF.
 
 on:
   push:
@@ -22,13 +26,19 @@ jobs:
     name: OSV-Scanner scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    continue-on-error: false
     steps:
       - uses: actions/checkout@v4
-      - name: Run OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v1
+      - name: Run OSV-Scanner (recursive scan, SARIF upload)
+        uses: google/osv-scanner-action/osv-scanner-action@v2
         with:
           scan-args: |-
             --recursive
-            --lockfile=build.gradle.kts
-            --lockfile=app/build.gradle.kts
+            --format=sarif
+            --output=results.sarif
             ./
+      - name: Upload SARIF to Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
