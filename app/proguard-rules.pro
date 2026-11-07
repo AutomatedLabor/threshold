@@ -57,3 +57,12 @@
 -keep class com.threshold.app.data.Defaults { *; }
 
 # --- AndroidX, Compose, etc. are kept by their own consumer rules ---
+
+# --- Missing-class warnings (not on Android) ---
+# JNA references java.awt.* (used on desktop only). On Android these classes
+# don't exist; the references are never followed at runtime. Suppress R8 errors.
+-dontwarn java.awt.**
+-dontwarn javax.swing.**
+-dontwarn sun.awt.**
+# Lazysodium's helper code references a few classes that aren't strictly needed.
+-dontwarn com.goterl.lazysodium.interfaces.**$*

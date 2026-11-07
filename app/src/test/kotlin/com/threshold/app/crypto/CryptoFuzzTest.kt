@@ -21,11 +21,11 @@ class CryptoFuzzTest {
 
     @Test
     fun `box_seal round-trip passes 10_000 random pairs`() {
-        val rng = Random(0xTHR3SHOLDxor) // fixed seed for reproducibility
+        val rng = Random(0x7455010dL xor 0xDEADBEEFL) // fixed seed for reproducibility
         var failures = 0
         for (i in 0 until iterations) {
             val kp = Crypto.generateKeyPair()
-            val len = rng.nextInt(0, 4096)
+            val len = rng.nextInt(4096)
             val plaintext = ByteArray(len)
             rng.nextBytes(plaintext)
             try {
@@ -33,7 +33,8 @@ class CryptoFuzzTest {
                 val plain = Crypto.open(cipher, kp.privateKeyBase64, kp.publicKeyBase64)
                 assertNotNull("iteration $i: open returned null", plain)
                 assertArrayEquals("iteration $i: round-trip mismatch (len=$len)", plaintext, plain)
-                Crypto.zero(plaintext); Crypto.zero(plain)
+                Crypto.zero(plaintext)
+                if (plain != null) Crypto.zero(plain)
             } catch (e: Throwable) {
                 failures++
                 if (failures <= 3) System.err.println("iteration $i failed: ${e.message}")
@@ -47,7 +48,7 @@ class CryptoFuzzTest {
         // Schnorr is pure-Kotlin BigInteger — slower than libsodium. 1k iterations
         // gives ~95% confidence at <60s; 10k would be 10min. Per iter-1 P0-13,
         // the box_seal path is 10k; Schnorr is 1k (signing isn't the round-trip bottleneck).
-        val rng = Random(0xTHR3SHOLD_schnorr)
+        val rng = Random(0x7455c010dL xor 0x53484500L)
         var failures = 0
         for (i in 0 until 1_000) {
             try {

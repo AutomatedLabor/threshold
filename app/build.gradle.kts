@@ -121,6 +121,16 @@ android {
     }
 }
 
+// Per build-contract §10: tests run in pure JVM (no Robolectric). LazysodiumAndroid
+// uses JNA to load libsodium, so the test JVM must have java.library.path set
+// to a directory containing libsodium.so. On Linux with system libsodium, that's
+// /usr/lib/x86_64-linux-gnu (which has libsodium.so.23, not libsodium.so — so
+// we also create a symlink in /home/z/.local/lib during build setup).
+tasks.withType<Test>().configureEach {
+    systemProperty("java.library.path", "/home/z/.local/lib:/usr/lib/x86_64-linux-gnu")
+    systemProperty("jna.library.path", "/home/z/.local/lib:/usr/lib/x86_64-linux-gnu")
+}
+
 dependencies {
     // Core
     implementation("androidx.core:core-ktx:1.13.1")
@@ -168,6 +178,13 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
     testImplementation("org.json:json:20240303")
+    // JNA JAR (not AAR) for JVM tests — the AAR has Android natives (jni/<abi>/) but
+    // not the linux-x86-64 native dispatch lib needed for JVM tests. The JAR has both
+    // the classes AND com/sun/jna/linux-x86-64/libjnidispatch.so for JVM tests.
+    testImplementation("net.java.dev.jna:jna:5.13.0")
+    // Lazysodium uses JNA at runtime; on Android the AAR provides the right natives.
+    // For JVM tests, we use the JNA JAR above + the system-installed libsodium (with
+    // a /home/z/.local/lib/libsodium.so → /usr/lib/x86_64-linux-gnu/libsodium.so.23 symlink).
 
     // Android tests (defined for completeness; not run in this sandbox)
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

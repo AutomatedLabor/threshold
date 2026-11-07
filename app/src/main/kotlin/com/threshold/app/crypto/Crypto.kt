@@ -2,33 +2,41 @@ package com.threshold.app.crypto
 
 import com.goterl.lazysodium.LazySodiumAndroid
 import com.goterl.lazysodium.SodiumAndroid
-import com.goterl.lazysodium.interfaces.BoxSeal
+import com.goterl.lazysodium.interfaces.Box
 import com.goterl.lazysodium.utils.Key
 import java.util.Base64
 
 /**
- * Crypto wrapper around libsodium (LazysodiumAndroid binding).
+ * Crypto wrapper around libsodium (LazysodiumAndroid 5.1.0 binding).
  *
  * Per build-contract §9: every release packet is encrypted to the contact's
  * pubkey with `crypto_box_seal`. The relay never sees plaintext.
  *
- * This class is the ONLY place in the app that calls into libsodium. All other
- * code goes through [Crypto]. This makes the crypto path a single seam that
- * the golden-vector and property-based fuzz tests can exercise.
- *
- * Memory hygiene: per build-contract §9, plaintext byte arrays are zeroed
- * with `sodium_memzero` after use via [zero]. The Kotlin GC will eventually
- * reclaim them but we don't wait for that.
+ * Uses the low-level byte-array API (not the high-level String-based
+ * `cryptoBoxSealEasy`) so the plaintext is treated as raw bytes (UTF-8,
+ * PDF, image — anything). The ciphertext is base64-encoded for transport.
  *
  * JVM-testable: uses java.util.Base64 (Android API 26+ per project minSdk),
  * not android.util.Base64 (which would require Robolectric).
+ *
+ * Lazysodium 5.1.0 API reference (verified via javap):
+ *  - LazySodiumAndroid(SodiumAndroid()) — constructor; loads native libsodium via JNA
+ *  - LazySodiumAndroid.cryptoBoxKeypair() — returns lazysodium KeyPair (X25519)
+ *  - LazySodiumAndroid.cryptoBoxSeal(byte[] cipher, byte[] msg, long msgLen, byte[] pub) — low-level seal
+ *  - LazySodiumAndroid.cryptoBoxSealOpen(byte[] msg, byte[] cipher, long cipherLen, byte[] pub, byte[] priv) — low-level open
+ *  - LazySodiumAndroid.randomBytesBuf(int) — returns ByteArray
+ *  - SodiumAndroid.sodium_memzero(byte[], int) — JNA native method on the Sodium instance
  */
 object Crypto {
 
-    /** Lazily-initialized libsodium. Initialization is idempotent and thread-safe. */
+    /** Lazily-initialized libsodium. Initialization is idempotent and thread-safe via Kotlin's `by lazy`. */
     private val lazySodium: LazySodiumAndroid by lazy {
-        SodiumAndroid.load()
         LazySodiumAndroid(SodiumAndroid())
+    }
+
+    /** Underlying Sodium JNA instance (for sodium_memzero). */
+    private val sodium: SodiumAndroid by lazy {
+        lazySodium.getSodium() as SodiumAndroid
     }
 
     /**
@@ -36,9 +44,9 @@ object Crypto {
      * Returns (privateKey 32 bytes, publicKey 32 bytes), both base64-encoded.
      */
     fun generateKeyPair(): KeyPair {
-        val key = lazySodium.cryptoBoxSealGenKeyPair()
-        val priv = key.secretKey.bytes
-        val pub = key.publicKey.bytes
+        val lazysodiumKp = lazySodium.cryptoBoxKeypair()
+        val priv = lazysodiumKp.secretKey.asBytes
+        val pub = lazysodiumKp.publicKey.asBytes
         val out = KeyPair(
             privateKeyBase64 = Base64.getEncoder().encodeToString(priv),
             publicKeyBase64 = Base64.getEncoder().encodeToString(pub)
@@ -56,15 +64,18 @@ object Crypto {
      */
     fun seal(plaintext: ByteArray, recipientPublicKeyBase64: String): String {
         val recipientPub = Base64.getDecoder().decode(recipientPublicKeyBase64)
-        val cipher = ByteArray(plaintext.size + BoxSeal.SEALBYTES)
-        val ok = lazySodium.cryptoBoxSealEasy(plaintext, plaintext.size.toLong(), Key.fromBytes(recipientPub), cipher)
+        require(recipientPub.size == Box.PUBLICKEYBYTES) {
+            "recipient public key must be ${Box.PUBLICKEYBYTES} bytes, got ${recipientPub.size}"
+        }
+        val cipher = ByteArray(plaintext.size + Box.SEALBYTES)
+        val ok = lazySodium.cryptoBoxSeal(cipher, plaintext, plaintext.size.toLong(), recipientPub)
         zero(recipientPub)
         if (!ok) {
-            zero(plaintext); zero(cipher)
-            throw IllegalStateException("crypto_box_seal_easy returned false")
+            zero(cipher)
+            throw IllegalStateException("cryptoBoxSeal returned false")
         }
         val out = Base64.getEncoder().encodeToString(cipher)
-        zero(plaintext); zero(cipher)
+        zero(cipher)
         return out
     }
 
@@ -77,8 +88,9 @@ object Crypto {
             val cipher = Base64.getDecoder().decode(ciphertextBase64)
             val priv = Base64.getDecoder().decode(privateKeyBase64)
             val pub = Base64.getDecoder().decode(publicKeyBase64)
-            val plain = ByteArray(cipher.size - BoxSeal.SEALBYTES)
-            val ok = lazySodium.cryptoBoxSealOpenEasy(cipher, cipher.size.toLong(), Key.fromBytes(pub), Key.fromBytes(priv), plain)
+            require(cipher.size >= Box.SEALBYTES) { "ciphertext too short" }
+            val plain = ByteArray(cipher.size - Box.SEALBYTES)
+            val ok = lazySodium.cryptoBoxSealOpen(plain, cipher, cipher.size.toLong(), pub, priv)
             zero(cipher); zero(priv); zero(pub)
             if (!ok) {
                 zero(plain)
@@ -95,9 +107,7 @@ object Crypto {
      * Generate cryptographically-secure random bytes. Used for nonces, packet IDs, etc.
      */
     fun randomBytes(count: Int): ByteArray {
-        val out = ByteArray(count)
-        lazySodium.randomBytesBuf(out, count.toLong())
-        return out
+        return lazySodium.randomBytesBuf(count)
     }
 
     /**
@@ -106,15 +116,19 @@ object Crypto {
      */
     fun zero(arr: ByteArray) {
         try {
-            SodiumAndroid.get().sodium_memzero(arr, arr.size.toLong())
+            sodium.sodium_memzero(arr, arr.size)
         } catch (_: Throwable) {
-            // Fallback: Kotlin-native fill(0) if JNI sodium_memzero isn't available.
             arr.fill(0)
         }
     }
 }
 
-/** X25519 keypair for crypto_box_seal. */
+/**
+ * X25519 keypair for crypto_box_seal, base64-encoded for transport / storage.
+ * Per build-contract §9: the user generates one of these as their "audit-readable"
+ * keypair and one for self-encryption of the heartbeat cadence payload.
+ * Each contact's release packet is sealed to a per-contact keypair.
+ */
 data class KeyPair(
     val privateKeyBase64: String,
     val publicKeyBase64: String

@@ -138,7 +138,7 @@ object Schnorr {
         val sG = G.multiply(s)
         val eP = P.multiply(e)
         val R = sG.add(eP.negate())
-        if (R.isInfinity()) return false
+        if (R.isInfinity) return false
         // R must have even y and R.x == r
         return R.hasEvenY() && R.x == r
     }
@@ -176,11 +176,24 @@ object Schnorr {
     private data class ECPoint(val x: BigInteger, val y: BigInteger) {
         val isInfinity: Boolean get() = x == BigInteger.ZERO && y == BigInteger.ZERO
 
+        /** Point doubling (secp256k1: a = 0). Does NOT recurse into multiply(). */
+        fun double(): ECPoint {
+            if (isInfinity) return INFINITY
+            // λ = (3 * x^2) / (2 * y)  mod p   (since a = 0 for secp256k1)
+            val threeXsq = x.modPow(BigInteger.valueOf(2), P).multiply(BigInteger.valueOf(3)).mod(P)
+            val twoY = y.multiply(BigInteger.valueOf(2)).mod(P)
+            val lambda = threeXsq.multiply(twoY.modInverse(P)).mod(P)
+            val x3 = lambda.modPow(BigInteger.valueOf(2), P).subtract(x.multiply(BigInteger.valueOf(2))).mod(P)
+            val y3 = lambda.multiply(x.subtract(x3)).subtract(y).mod(P)
+            return ECPoint(x3, y3)
+        }
+
         fun add(other: ECPoint): ECPoint {
             if (isInfinity) return other
             if (other.isInfinity) return this
             if (x == other.x) {
-                if (y == other.y) return multiply(BigInteger.valueOf(2))
+                // Same x: either doubling (same y) or inversion (different y → infinity).
+                if (y == other.y) return double()
                 return INFINITY
             }
             val lambda = (other.y.subtract(y)).multiply((other.x.subtract(x)).modInverse(P)).mod(P)
@@ -190,7 +203,7 @@ object Schnorr {
         }
 
         fun multiply(k: BigInteger): ECPoint {
-            // Double-and-add.
+            // Double-and-add (iterative — does NOT recurse into add→multiply→add).
             if (k == BigInteger.ZERO || isInfinity) return INFINITY
             val kAbs = if (k < BigInteger.ZERO) N.add(k) else k
             var result = INFINITY
@@ -200,7 +213,7 @@ object Schnorr {
                 if (bits.and(BigInteger.ONE) == BigInteger.ONE) {
                     result = result.add(addend)
                 }
-                addend = addend.add(addend)
+                addend = addend.double()
                 bits = bits.shiftRight(1)
             }
             return result

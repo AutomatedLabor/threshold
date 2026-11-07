@@ -8,8 +8,7 @@ package com.threshold.app.crypto
  *
  * Per NIP-19: https://github.com/nostr-protocol/nips/blob/master/19.md
  *
- * Pure Kotlin; no external dependency. Used by NostrIdentity and the
- * survivor instructions template.
+ * Pure Kotlin; no external dependency.
  */
 object Bech32 {
 
@@ -20,32 +19,41 @@ object Bech32 {
 
     /** Encode 32 raw bytes with the given prefix (e.g., "npub", "nsec"). Returns "prefix1...". */
     fun encode(prefix: String, data: ByteArray): String {
-        // Convert from 8-bit to 5-bit groups (BIP-173).
         val converted = convertBits(data, 8, 5, true)
-        val checksum = createChecksum(prefix, converted)
+        // convertBits returns ByteArray; checksum helpers want IntArray. Convert once.
+        val convertedInts = IntArray(converted.size) { converted[it].toInt() and 0x1F }
+        val checksum = createChecksum(prefix, convertedInts)
         val sb = StringBuilder(prefix).append('1')
-        for (b in converted) sb.append(CHARSET[b.toInt() and 0x1F])
-        for (b in checksum) sb.append(CHARSET[b.toInt() and 0x1F])
+        for (b in convertedInts) sb.append(CHARSET[b and 0x1F])
+        for (b in checksum) sb.append(CHARSET[b and 0x1F])
         return sb.toString()
     }
 
     /** Decode a bech32 string. Returns (prefix, data bytes). Throws on invalid format/checksum. */
     fun decode(s: String): Pair<String, ByteArray> {
         require(s.length <= 90) { "bech32 string too long" }
-        require(s == s.lower() || s == s.upper) { "mixed case not allowed" }
-        val str = s.lower()
+        require(s == s.lowercase() || s == s.uppercase()) { "mixed case not allowed" }
+        val str = s.lowercase()
         val pos = str.lastIndexOf('1')
         require(pos in 1..str.length - 7) { "no separator or too short" }
         val prefix = str.substring(0, pos)
         val charsetPart = str.substring(pos + 1)
+        // The charset part is data + 6 checksum chars. The checksum is verified over
+        // the full set; the data is the first (len - 6) chars.
+        require(charsetPart.length >= 6) { "charset part too short for checksum" }
+        val dataLen = charsetPart.length - 6
         val data = IntArray(charsetPart.length)
         for (i in charsetPart.indices) {
-            data[i] = CHARSET_REV[charsetPart[i].code]
+            val c = charsetPart[i].code
+            require(c in 0..127) { "non-ascii char: ${charsetPart[i]}" }
+            data[i] = CHARSET_REV[c]
             require(data[i] != -1) { "invalid char in data: ${charsetPart[i]}" }
         }
         verifyChecksum(prefix, data)
-        val converted = convertBits(data.map { it.toByte() }.toByteArray(), 5, 8, false)
-        return prefix to converted.copyOfRange(0, converted.size - 0)  // trim trailing zero-padding
+        // Strip the 6 checksum 5-bit groups before converting to 8-bit bytes.
+        val dataOnly = ByteArray(dataLen) { data[it].toByte() }
+        val converted = convertBits(dataOnly, 5, 8, false)
+        return prefix to converted
     }
 
     private fun polymod(values: IntArray): Int {
@@ -81,16 +89,17 @@ object Bech32 {
         return IntArray(6) { (mod shr (5 * (5 - it))) and 0x1F }
     }
 
-    /** Bit conversion between 8-bit and 5-bit groups (BIP-173). */
+    /** Bit conversion between groups. `data` is ByteArray; output is ByteArray. */
     private fun convertBits(data: ByteArray, fromBits: Int, toBits: Int, pad: Boolean): ByteArray {
         var acc = 0
         var bits = 0
         val out = mutableListOf<Byte>()
         val maxv = (1 shl toBits) - 1
+        val maxAcc = (1 shl (fromBits + toBits - 1)) - 1
         for (b in data) {
             val value = b.toInt() and 0xFF
             require(value < (1 shl fromBits)) { "value exceeds fromBits" }
-            acc = (acc shl fromBits) or value
+            acc = ((acc shl fromBits) or value) and maxAcc
             bits += fromBits
             while (bits >= toBits) {
                 bits -= toBits

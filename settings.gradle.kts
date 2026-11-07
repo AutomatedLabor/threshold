@@ -1,12 +1,12 @@
 pluginManagement {
     repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-        // Aliyun kept as a fallback (faster from CN, but flaky).
+        // Aliyun mirror FIRST to avoid Maven Central 429 rate-limits (per family-locator LEARNINGS).
         maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
+        google()
+        mavenCentral()
+        gradlePluginPortal()
     }
     resolutionStrategy {
         eachPlugin {
@@ -25,11 +25,13 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google()
-        mavenCentral()
-        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
+        // Aliyun mirror FIRST (CN-hosted, not rate-limited from this sandbox).
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
+        google()
+        mavenCentral()
+        // Google's read-through mirror of Maven Central as a final fallback.
+        maven { url = uri("https://maven-central.storage-download.googleapis.com/maven2/") }
     }
 }
 

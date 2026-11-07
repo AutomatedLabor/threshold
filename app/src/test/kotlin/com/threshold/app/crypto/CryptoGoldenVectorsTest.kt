@@ -74,11 +74,13 @@ class CryptoGoldenVectorsTest {
     @Test
     fun `BIP-340 Schnorr test vector 0 - official`() {
         // From https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
-        // index 0: secret_key=0x03, aux=0x00, message=0x00, signature=E907831F80848D10696A60DDF96237FE5D536876CA67F70CB8B5931FC6D39C55
+        // index 0: secret_key=0x03, aux=0x00, message=0x00,
+        // signature=E907831F... (64 bytes / 128 hex chars)
         val secretKey = hexToBytes("0000000000000000000000000000000000000000000000000000000000000003")
         val auxRand = ByteArray(32)  // all zeros
         val message = ByteArray(32)  // all zeros
-        val expectedSig = "E907831F80848D10696A60DDF96237FE5D536876CA67F70CB8B5931FC6D39C55".lowercase()
+        val expectedSig = "e907831f80848d1069a5371b402410364bdf1c5f8307b0084c55f1ce2dca821525f66a4a85ea8b71e482a74f382d2ce5ebeee8fdb2172f477df4900d310536c0"
+        val expectedPub = "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9"
 
         val sig = Schnorr.sign(secretKey, message, auxRand)
         val sigHex = sig.joinToString("") { "%02x".format(it) }
@@ -87,10 +89,7 @@ class CryptoGoldenVectorsTest {
         // Verify against the official public key for this secret.
         val pub = Schnorr.computePublicKey(secretKey)
         val pubHex = pub.joinToString("") { "%02x".format(it) }
-        assertEquals(
-            "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9".lowercase(),
-            pubHex
-        )
+        assertEquals(expectedPub, pubHex)
         assertTrue("Schnorr.verify failed for BIP-340 vector 0", Schnorr.verify(pub, message, sig))
     }
 

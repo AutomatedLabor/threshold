@@ -18,7 +18,7 @@ import org.junit.Test
 class MaxSeenRuleTest {
 
     @Test
-    fun `events with monotonic created_at are accepted; rollback rejected`() {
+    fun `events with monotonic created_at are accepted, rollback rejected`() {
         val survivor = NostrIdentity.generate()
         val user = NostrIdentity.generate()
         val client = SurvivorClient(survivor, user.npubHex, null)
